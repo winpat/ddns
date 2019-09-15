@@ -16,6 +16,7 @@ let
     pkgs.zlib
     pkgs.pkgconfig
     haskellPackages.ghcid
+    haskellPackages.hlint
   ];
 
 in pkgs.stdenv.mkDerivation {
