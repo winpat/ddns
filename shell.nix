@@ -5,6 +5,8 @@ let
   inherit (pkgs) haskellPackages;
 
   haskellDeps = ps: with ps; [
+    # NOTE: This is required so cabal finds zlib (pkgs.zlib does not suffice)
+    # https://github.com/haskell/cabal/issues/5858
     zlib
   ];
 
@@ -17,6 +19,7 @@ let
     pkgs.pkgconfig
     haskellPackages.ghcid
     haskellPackages.hlint
+    pkgs.cabal2nix
   ];
 
 in pkgs.stdenv.mkDerivation {
