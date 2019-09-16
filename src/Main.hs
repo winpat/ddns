@@ -5,7 +5,7 @@ module Main where
 import System.Console.GetOpt
 import System.Environment (getArgs)
 
-import Network.Wreq (get, getWith, defaults, auth, oauth2Bearer, responseBody)
+import Network.Wreq (get, getWith, putWith, defaults, auth, oauth2Bearer, responseBody)
 import Control.Lens
 import Control.Concurrent
 
@@ -63,10 +63,24 @@ loop :: Text -> Text -> Text -> IO ()
 loop t r d = do
   dynIp <- publicIp
   record <- recordByName r d t
-  print record
-  print dynIp
+  case dynIp of
+    Nothing -> putStrLn "Unable to fetch public ip address!"
+    Just ipX -> case record of
+      Nothing -> print "Unable to fetch DigitalOceean record"
+      Just ipY -> if ipX /= (ip ipY)
+        then updateRecord t d (recordId ipY) ipX
+        else print "Nothing has changed!"
   threadDelay 5000000
   loop t r d
+
+updateRecord :: Text -> Text -> Integer -> Text -> IO ()
+updateRecord t dom id ip = do
+  print $ "Record " <> (pack . show) id <> " was changed to " <> ip
+  resp <- putWith opts (unpack url) body
+  return ()
+  where body = (toJSON . HM.fromList) [("data" :: String, (unpack ip))]
+        url = "https://api.digitalocean.com/v2/domains/" <> dom <> "/records/" <> (pack . show) id
+        opts = defaults & auth ?~ oauth2Bearer (encodeUtf8 t)
 
 data DnsRecord = DnsRecord { recordId :: Integer
                            , ip :: Text
