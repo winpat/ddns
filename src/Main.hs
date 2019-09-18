@@ -5,6 +5,8 @@ module Main where
 import System.Console.GetOpt
 import System.Environment (getArgs)
 
+import Control.Monad.Reader
+
 import Network.Wreq (get, getWith, putWith, defaults, auth, oauth2Bearer, responseBody)
 import Control.Lens
 import Control.Concurrent
@@ -24,54 +26,53 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as BS
 import qualified Data.HashMap.Strict as HM
 
-data Flags = Flags
+data Env = Env
   { token :: Text
   , domain :: Text
   , record :: Text
   } deriving Show
 
-defaultFlags = Flags
+defaultEnv = Env
   { token = ""
   , domain = ""
   , record = ""
   }
 
-options :: [OptDescr (Flags -> Flags)]
+options :: [OptDescr (Env -> Env)]
 options =
   [ Option ['t'] ["token"]  (ReqArg (\t opts -> opts { token = pack t })  "TOKEN")  "DigitalOcean API token"
   , Option ['r'] ["record"] (ReqArg (\r opts -> opts { record = pack r }) "RECORD") "Name of A record"
   , Option ['d'] ["domain"] (ReqArg (\d opts -> opts { domain = pack d }) "DOMAIN") "Name of domain"
   ]
 
-ddnsOpts :: [String] -> IO (Flags, [String])
+ddnsOpts :: [String] -> IO (Env, [String])
 ddnsOpts argv =
   case getOpt Permute options argv of
-         (o,n,[]  ) -> return (foldl (flip id) defaultFlags o, n)
+         (o,n,[]  ) -> return (foldl (flip id) defaultEnv o, n)
          (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
    where header = "Usage: ddns -t <api_token> -r <record_name> -d <domain_name>"
 
 main :: IO ()
 main = do
     args <- getArgs
-    (flags, _) <- ddnsOpts args
-    let t = token flags
-        r = record flags
-        d = domain flags
-    loop t r d
+    (env, _) <- ddnsOpts args
+    runReaderT loop env
 
-loop :: Text -> Text -> Text -> IO ()
-loop t r d = do
-  dynIp <- publicIp
-  record <- recordByName r d t
+loop :: ReaderT Env IO ()
+loop = do
+  env <- ask
+  let t = token env
+      r = record env
+      d = domain env
+  dynIp <- liftIO publicIp
+  record <- liftIO $ recordByName r d t
   case dynIp of
-    Nothing -> putStrLn "Unable to fetch public ip address!"
+    Nothing -> liftIO $ putStrLn "Unable to fetch public ip address!"
     Just ipX -> case record of
-      Nothing -> print "Unable to fetch DigitalOceean record"
+      Nothing -> liftIO $ print "Unable to fetch DigitalOceean record"
       Just ipY -> if ipX /= (ip ipY)
-        then updateRecord t d (recordId ipY) ipX
-        else print "Nothing has changed!"
-  threadDelay 5000000
-  loop t r d
+        then liftIO $ updateRecord t d (recordId ipY) ipX
+        else liftIO $ print "Nothing has changed!"
 
 updateRecord :: Text -> Text -> Integer -> Text -> IO ()
 updateRecord t dom id ip = do
